@@ -1,20 +1,3 @@
-// What it does:
-//
-// This example uses the Tensorflow (https://www.tensorflow.org/) deep learning framework
-// to classify whatever is in front of the camera.
-//
-// Download the Tensorflow "Inception" model and descriptions file from:
-// https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip
-//
-// Extract the tensorflow_inception_graph.pb model file from the .zip file.
-//
-// Also extract the imagenet_comp_graph_label_strings.txt file with the descriptions.
-//
-// How to run:
-//
-// 		go run ./cmd/tf-classifier/main.go 0 ~/Downloads/tensorflow_inception_graph.pb ~/Downloads/imagenet_comp_graph_label_strings.txt opencv cpu
-//
-
 package main
 
 import (
@@ -29,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"example.com/pi-video-recorder/utils/bufferqueue"
+	"github.com/slee981/pi-video-camera/utils/bufferqueue"
 	"gocv.io/x/gocv"
 )
 

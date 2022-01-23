@@ -1,4 +1,4 @@
-module example.com/pi-video-recorder
+module github.com/slee981/pi-video-camera
 
 go 1.15
 
