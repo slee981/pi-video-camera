@@ -225,6 +225,7 @@ func writeVideo(bq *bufferqueue.BufferQueue, wg *sync.WaitGroup) {
 	log.Info("done sleeping. doing save")
 
 	// lock buffer queue and get dim of first image
+	// NOTE do not close image as it will remove you first image from queue
 	bq.Lock()
 	defer bq.Unlock()
 	img := bq.First().GetData()
