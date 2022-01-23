@@ -1,16 +1,16 @@
 /*
-** BUFFERQUEUE is a simple linked list that keeps 
-** track of the first and last nodes, but importantly 
-** also has a "maxLength" attribute that will specify 
-** conditions of when to update the head. Additionally, 
-** this implements a lock condition for updating the 
-** queue so as to not add or delete an element while another 
-** resource is using it. 
-**
-** An example use case is to keep a streaming queue 
-** of a certain maximum size - so as new elements are added 
-** to the queue, the oldest elements are removed.
-*/
+ * BUFFERQUEUE is a simple linked list that keeps
+ * track of the first and last nodes, but importantly
+ * also has a "maxLength" attribute that will specify
+ * conditions of when to update the head. Additionally,
+ * this implements a lock condition for updating the
+ * queue so as to not add or delete an element while another
+ * resource is using it.
+ *
+ * An example use case is to keep a streaming queue
+ * of a certain maximum size - so as new elements are added
+ * to the queue, the oldest elements are removed.
+ */
 
 package bufferqueue
 
@@ -39,10 +39,10 @@ type BufferQueue struct {
 
 func NewBufferQueue(n int) *BufferQueue {
 	return &BufferQueue{
-		length: 0,
-		maxLength: n,
+		length:     0,
+		maxLength:  n,
 		isWritable: true,
-		mu: new(sync.Mutex),
+		mu:         new(sync.Mutex),
 	}
 }
 
@@ -54,73 +54,73 @@ func NewNode(d gocv.Mat, n *Node) *Node {
 }
 
 // we only care about pushing new data into the queue
-// cleanup is handled automatically anytime a new 
+// cleanup is handled automatically anytime a new
 // node is added that exceeds the "maxLength" of the buffer
 func (bq *BufferQueue) Push(d gocv.Mat) (bool, error) {
-	data := gocv.NewMat()
-	d.CopyTo(&data)
+	img := gocv.NewMat()
+	d.CopyTo(&img)
 
-	// lock queue 
+	// lock queue
 	bq.Lock()
 	defer bq.Unlock()
 
-	// create new node 
-	n := NewNode(data, nil)
+	// create new node
+	n := NewNode(img, nil)
 
-	// get current last node 
+	// get current last node
 	l := bq.Last()
 	if l == nil {
 		// no last node, also no first node
-		// init the list 
+		// init the list
 		bq.SetFirst(n)
 	} else {
 		l.SetNext(n)
 	}
 
-    bq.SetLast(n)
-    return true, nil
+	bq.SetLast(n)
+	return true, nil
 }
 
 /********************************************************************
-** HELPERS TO ACCESS ATTRIBUTES 
-*/
+ * HELPERS TO ACCESS ATTRIBUTES
+ */
 
-// bufferqueue helpers
+/* bufferqueue helpers */
 
 // external
 
 func (bq *BufferQueue) SetFirst(n *Node) (bool, error) {
-    // only called when first node is added 
-    bq.head = n
-    return true, nil
+	// only called when first node is added
+	bq.head = n
+	return true, nil
 }
 
 func (bq *BufferQueue) SetLast(n *Node) (bool, error) {
 
-    // set new node to end of list 
+	// set new node to end of list
 	bq.addTail(n)
 
 	// manage length
-    // if length is less than maxLength, increment 
-    // otherwise, update the head to head.next
-    bq.manageLength()
-    return true, nil
+	// if length is less than maxLength, increment
+	// otherwise, update the head to head.next
+	bq.manageLength()
+	return true, nil
 }
 
 func (bq *BufferQueue) First() *Node {
-    return bq.head
+	return bq.head
 }
 
 func (bq *BufferQueue) Last() *Node {
-    return bq.tail
+	return bq.tail
 }
 
 func (bq *BufferQueue) Length() int {
-    return bq.length
+	return bq.length
 }
 
 func (bq *BufferQueue) MaxLength() int {
-    return bq.maxLength
+	return bq.maxLength
 }
 
 func (bq *BufferQueue) Lock() {
@@ -150,16 +150,34 @@ func (bq *BufferQueue) ToString() {
 	fmt.Println()
 }
 
-// internal 
+// internal
 
 func (bq *BufferQueue) addTail(n *Node) {
-    bq.tail = n
+	bq.tail = n
 }
 
 func (bq *BufferQueue) manageLength() {
-    // check if new length is longer than maxLength
-	// if yes, remove first node and reset to next node 
+	// check if new length is longer than maxLength
+	// if yes, remove first node and reset to next node
+	//
+	// NOTE
+	// it is very important to close the image before deletion.
+	//
+	// From the documentation: https://github.com/hybridgroup/gocv
+	//
+	// Since memory allocations for images in GoCV are done through
+	// C based code, the go garbage collector will not clean all resources
+	// associated with a Mat. As a result, any Mat created must be closed
+	// to avoid memory leaks.
+	//
+	// uncomment to debug, and run program with tag
+	// $ go run -tags matprofile ./main.go
+	//
+	// fmt.Println("open gocv.Mat objects: ", gocv.MatProfile.Count())
 	if bq.Length() >= bq.MaxLength() {
+		rmImg := bq.First().GetData()
+		defer rmImg.Close()
+
 		bq.SetFirst(bq.First().Next())
 	} else {
 		bq.incrementLength()
@@ -167,24 +185,22 @@ func (bq *BufferQueue) manageLength() {
 }
 
 func (bq *BufferQueue) incrementLength() {
-    bq.length++
+	bq.length++
 }
-
 
 // node helpers
 
-// external 
+// external
 
 func (n *Node) SetNext(nn *Node) (bool, error) {
-    n.next = nn
-    return true, nil
+	n.next = nn
+	return true, nil
 }
 
 func (n *Node) Next() *Node {
-    return n.next
+	return n.next
 }
 
 func (n *Node) GetData() gocv.Mat {
 	return n.data
 }
-

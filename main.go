@@ -46,51 +46,37 @@ var (
 	SAVE_FILE_TEMPLATE string = "imgs/recording_{VIDEO_NUMBER}.avi"
 )
 
+var (
+	deviceID int    = 0
+	model    string = "/home/stephen/Downloads/tf/tensorflow_inception_graph.pb"
+	// descr       string = "/home/stephen/Downloads/tf/imagenet_comp_graph_label_strings.txt"
+	backendPref string = "opencv"
+	targetPref  string = "cpu"
+)
+
 func main() {
 
 	// prediction channel
+	wg := new(sync.WaitGroup)
 	pc := make(chan int, 1)
-	// interrupt
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	wg := new(sync.WaitGroup)
 
 	// buffer queue for handling video stream
 	bq := bufferqueue.NewBufferQueue(FRAMES_PER_VIDEO)
 
-	/////////////////////////////////////////////////////////
-	// REMOVE THIS
-	if len(os.Args) < 4 {
-		fmt.Println("How to run:\ntf-classifier [camera ID] [modelfile] [descriptionsfile]")
-		return
-	}
-
-	// parse args
-	deviceID := os.Args[1]
-	model := os.Args[2]
-	// descr := os.Args[3]
+	// read model description
 	// descriptions, err := readDescriptions(descr)
-
 	// if err != nil {
 	// 	fmt.Printf("Error reading descriptions file: %v\n", descr)
+	// 	fmt.Println(err)
 	// 	return
 	// }
-	// END REMOVE THIS
-	/////////////////////////////////////////////////////////
 
-	/////////////////////////////////////////////////////////
-	// can i clean this up?
-	backend := gocv.NetBackendDefault
-	if len(os.Args) > 4 {
-		backend = gocv.ParseNetBackend(os.Args[4])
-	}
+	/* setup model */
 
-	target := gocv.NetTargetCPU
-	if len(os.Args) > 5 {
-		target = gocv.ParseNetTarget(os.Args[5])
-	}
-
-	// open capture device
+	backend := gocv.ParseNetBackend(backendPref)
+	target := gocv.ParseNetTarget(targetPref)
 	webcam, err := gocv.OpenVideoCapture(deviceID)
 	if err != nil {
 		fmt.Printf("Error opening video capture device: %v\n", deviceID)
@@ -111,10 +97,7 @@ func main() {
 	net.SetPreferableBackend(gocv.NetBackendType(backend))
 	net.SetPreferableTarget(gocv.NetTargetType(target))
 
-	// end can I clean this up?
-	/////////////////////////////////////////////////////////
-
-	// init img size and make initial prediction
+	// initialize image and prediciton
 	if ok := webcam.Read(&img); !ok {
 		fmt.Printf("Cannot read dev %v\n", deviceID)
 		return
@@ -125,8 +108,9 @@ func main() {
 
 	/* do main loop */
 
-	fmt.Printf("Start reading device: %v\n", deviceID)
+	fmt.Println("recording...")
 	run := true
+	ct := 0
 	for run {
 		if ok := webcam.Read(&img); !ok {
 			fmt.Printf("Device closed: %v\n", deviceID)
@@ -145,12 +129,15 @@ func main() {
 		// communicates back over a channel when complete
 		select {
 		case pred := <-pc:
+			// desc := descriptions[pred]
+			// fmt.Println("loop", ct, ": found ", desc, " at idx ", pred)
 			if pred == PRED_TO_MATCH {
-				// desc := descriptions[pred]
-				// fmt.Println("loop ", i, ": found ", desc, ", idx: ", pred)
-
-				// write file only when we found what we wanted
-				// but make sure we're not constantly telling it to write
+				// 1- write video only when we found what we wanted
+				// 2- make sure we're not in the middle of a previous write
+				//
+				// NOTE: after a "writeVideo" call, write will sleep for some time
+				// before actually writing the file to ensure the triggering event
+				// is caught in the middle of the video.
 				switch {
 				case bq.IsWritable():
 					// last write already succeeded
@@ -171,6 +158,7 @@ func main() {
 			// no prediction result back yet
 			continue
 		}
+		ct++
 	}
 
 	wg.Wait()
