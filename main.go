@@ -23,43 +23,43 @@ import (
 	"image"
 	"os"
 	"os/signal"
-	"syscall"
-    "strings"
-    "strconv"
+	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
-	"gocv.io/x/gocv"
 	"example.com/pi-video-recorder/utils/bufferqueue"
+	"gocv.io/x/gocv"
 )
 
 var (
-    VIDEO_NUMBER int = 1      // counter 
-    PRED_TO_MATCH int = 535   // idx from labels 
+	VIDEO_NUMBER  int = 1   // counter
+	PRED_TO_MATCH int = 535 // idx from labels
 
-	RECORD_TIME int = 15      // seconds 
-	RECORD_TIME_AFTER_TRIGGER = RECORD_TIME / 2
+	RECORD_TIME               int = 15 // seconds
+	RECORD_TIME_AFTER_TRIGGER     = RECORD_TIME / 2
 
-    FPS float64 = 15
-    FRAMES_PER_VIDEO int = int(FPS) * RECORD_TIME
+	FPS              float64 = 15
+	FRAMES_PER_VIDEO int     = int(FPS) * RECORD_TIME
 
-    SAVE_FILE_TEMPLATE string = "imgs/recording_{VIDEO_NUMBER}.avi"
+	SAVE_FILE_TEMPLATE string = "imgs/recording_{VIDEO_NUMBER}.avi"
 )
 
 func main() {
 
-	// prediction channel 
+	// prediction channel
 	pc := make(chan int, 1)
-	// interrupt 
+	// interrupt
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	wg := new(sync.WaitGroup)
 
-    // buffer queue for handling video stream
-    bq := bufferqueue.NewBufferQueue(FRAMES_PER_VIDEO)
+	// buffer queue for handling video stream
+	bq := bufferqueue.NewBufferQueue(FRAMES_PER_VIDEO)
 
 	/////////////////////////////////////////////////////////
-	// REMOVE THIS 
+	// REMOVE THIS
 	if len(os.Args) < 4 {
 		fmt.Println("How to run:\ntf-classifier [camera ID] [modelfile] [descriptionsfile]")
 		return
@@ -75,11 +75,11 @@ func main() {
 	// 	fmt.Printf("Error reading descriptions file: %v\n", descr)
 	// 	return
 	// }
-	// END REMOVE THIS 
+	// END REMOVE THIS
 	/////////////////////////////////////////////////////////
 
 	/////////////////////////////////////////////////////////
-	// can i clean this up? 
+	// can i clean this up?
 	backend := gocv.NetBackendDefault
 	if len(os.Args) > 4 {
 		backend = gocv.ParseNetBackend(os.Args[4])
@@ -111,10 +111,10 @@ func main() {
 	net.SetPreferableBackend(gocv.NetBackendType(backend))
 	net.SetPreferableTarget(gocv.NetTargetType(target))
 
-	// end can I clean this up? 
+	// end can I clean this up?
 	/////////////////////////////////////////////////////////
 
-	// init img size and make initial prediction 
+	// init img size and make initial prediction
 	if ok := webcam.Read(&img); !ok {
 		fmt.Printf("Cannot read dev %v\n", deviceID)
 		return
@@ -125,7 +125,7 @@ func main() {
 
 	/* do main loop */
 
-    fmt.Printf("Start reading device: %v\n", deviceID)
+	fmt.Printf("Start reading device: %v\n", deviceID)
 	run := true
 	for run {
 		if ok := webcam.Read(&img); !ok {
@@ -136,45 +136,44 @@ func main() {
 			continue
 		}
 
-        // push frame to queue 
-        bq.Push(img)
+		// push frame to queue
+		bq.Push(img)
 
 		// make prediction when ready
-		// 
-		// do this in a go routine that 
-		// communicates back over a channel when complete 
+		//
+		// do this in a go routine that
+		// communicates back over a channel when complete
 		select {
 		case pred := <-pc:
 			if pred == PRED_TO_MATCH {
 				// desc := descriptions[pred]
 				// fmt.Println("loop ", i, ": found ", desc, ", idx: ", pred)
 
-                // write file only when we found what we wanted
+				// write file only when we found what we wanted
 				// but make sure we're not constantly telling it to write
 				switch {
-				case bq.CanWrite():
+				case bq.IsWritable():
 					// last write already succeeded
 					wg.Add(1)
 					go writeVideo(bq, wg)
 				default:
 					// we matched again before the last write is complete
-					fmt.Println("not ready to write new video yet")
 				}
 			}
 
-			// send new prediction 
+			// send new prediction
 			wg.Add(1)
 			go predict(net, img, pc, wg)
 		case <-done:
 			fmt.Println("received interrupt. shutting down gracefully.")
 			run = false
 		default:
-			// no prediction result back yet 
+			// no prediction result back yet
 			continue
 		}
 	}
 
-	wg.Wait()	
+	wg.Wait()
 }
 
 // readDescriptions reads the descriptions from a file
@@ -222,26 +221,26 @@ func writeVideo(bq *bufferqueue.BufferQueue, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	// block other write calls
-	bq.Mu.Lock()
+	bq.Lock()
 	bq.LockWrite()
 	defer bq.UnlockWrite()
-	bq.Mu.Unlock()
+	bq.Unlock()
 
-	// sleep in the background until we're ready to capture video 
+	// sleep in the background until we're ready to capture video
 	fmt.Println("triggered save. sleeping... ")
 	time.Sleep(time.Second * time.Duration(RECORD_TIME_AFTER_TRIGGER))
 	fmt.Println("done sleeping. doing save")
 
-	// lock buffer queue and get dim of first image 
-	bq.Mu.Lock()
-	defer bq.Mu.Unlock()
+	// lock buffer queue and get dim of first image
+	bq.Lock()
+	defer bq.Unlock()
 	img := bq.First().GetData()
 
-    // create filename 
-    saveFname := genSaveFname()
-    fmt.Println("saving to: ", saveFname)
+	// create filename
+	saveFname := genSaveFname()
+	fmt.Println("saving to: ", saveFname)
 
-    // create writer
+	// create writer
 	writer, err := gocv.VideoWriterFile(saveFname, "MJPG", FPS, img.Cols(), img.Rows(), true)
 	if err != nil {
 		fmt.Printf("error opening video writer device: %v\n", saveFname)
@@ -249,21 +248,21 @@ func writeVideo(bq *bufferqueue.BufferQueue, wg *sync.WaitGroup) {
 	}
 	defer writer.Close()
 
-    // write each image in the list and communicate back
-    doWrite(bq, writer)
+	// write each image in the list and communicate back
+	doWrite(bq, writer)
 }
 
 func doWrite(bq *bufferqueue.BufferQueue, writer *gocv.VideoWriter) {
 	for n := bq.First(); n != nil; n = n.Next() {
 		writer.Write(n.GetData())
 	}
+	fmt.Println("saved.")
 }
 
 func genSaveFname() string {
-    replaceTag := "{VIDEO_NUMBER}"
-    r := strings.NewReplacer(replaceTag, strconv.Itoa(VIDEO_NUMBER))
+	replaceTag := "{VIDEO_NUMBER}"
+	r := strings.NewReplacer(replaceTag, strconv.Itoa(VIDEO_NUMBER))
 
-    VIDEO_NUMBER++
-    return r.Replace(SAVE_FILE_TEMPLATE)
+	VIDEO_NUMBER++
+	return r.Replace(SAVE_FILE_TEMPLATE)
 }
-

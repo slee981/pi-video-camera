@@ -27,22 +27,22 @@ type Node struct {
 }
 
 type BufferQueue struct {
-	length    int
-	maxLength int
-	canWrite  bool
+	length     int
+	maxLength  int
+	isWritable bool
 
 	head *Node
 	tail *Node
 
-	Mu       *sync.Mutex
+	mu *sync.Mutex
 }
 
 func NewBufferQueue(n int) *BufferQueue {
 	return &BufferQueue{
 		length: 0,
 		maxLength: n,
-		canWrite: true,
-		Mu: new(sync.Mutex),
+		isWritable: true,
+		mu: new(sync.Mutex),
 	}
 }
 
@@ -61,8 +61,8 @@ func (bq *BufferQueue) Push(d gocv.Mat) (bool, error) {
 	d.CopyTo(&data)
 
 	// lock queue 
-	bq.Mu.Lock()
-	defer bq.Mu.Unlock()
+	bq.Lock()
+	defer bq.Unlock()
 
 	// create new node 
 	n := NewNode(data, nil)
@@ -123,16 +123,24 @@ func (bq *BufferQueue) MaxLength() int {
     return bq.maxLength
 }
 
-func (bq *BufferQueue) CanWrite() bool {
-	return bq.canWrite
+func (bq *BufferQueue) Lock() {
+	bq.mu.Lock()
+}
+
+func (bq *BufferQueue) Unlock() {
+	bq.mu.Unlock()
+}
+
+func (bq *BufferQueue) IsWritable() bool {
+	return bq.isWritable
 }
 
 func (bq *BufferQueue) LockWrite() {
-	bq.canWrite = false
+	bq.isWritable = false
 }
 
 func (bq *BufferQueue) UnlockWrite() {
-	bq.canWrite = true
+	bq.isWritable = true
 }
 
 func (bq *BufferQueue) ToString() {
