@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"image"
 	"os"
 	"os/signal"
@@ -12,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/slee981/pi-video-camera/utils/bufferqueue"
 	"gocv.io/x/gocv"
 )
@@ -30,16 +30,24 @@ var (
 )
 
 var (
-	deviceID int    = 0
-	model    string = "/home/stephen/Downloads/tf/tensorflow_inception_graph.pb"
-	// descr       string = "/home/stephen/Downloads/tf/imagenet_comp_graph_label_strings.txt"
+	deviceID    int    = 0
+	model       string = "/home/stephen/Downloads/tf/tensorflow_inception_graph.pb"
+	descr       string = "/home/stephen/Downloads/tf/imagenet_comp_graph_label_strings.txt"
 	backendPref string = "opencv"
 	targetPref  string = "cpu"
 )
 
+var log = logrus.New()
+
 func main() {
 
-	// prediction channel
+	// log setup
+	log.SetOutput(os.Stdout)
+	log.SetLevel(logrus.InfoLevel)
+
+	// channel setup
+	// 1- prediction channel for the model results
+	// 2- done channel for interrupts
 	wg := new(sync.WaitGroup)
 	pc := make(chan int, 1)
 	done := make(chan os.Signal, 1)
@@ -49,12 +57,13 @@ func main() {
 	bq := bufferqueue.NewBufferQueue(FRAMES_PER_VIDEO)
 
 	// read model description
-	// descriptions, err := readDescriptions(descr)
-	// if err != nil {
-	// 	fmt.Printf("Error reading descriptions file: %v\n", descr)
-	// 	fmt.Println(err)
-	// 	return
-	// }
+	descriptions, err := readDescriptions(descr)
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("cannot read model labels.")
+		return
+	}
 
 	/* setup model */
 
@@ -62,7 +71,10 @@ func main() {
 	target := gocv.ParseNetTarget(targetPref)
 	webcam, err := gocv.OpenVideoCapture(deviceID)
 	if err != nil {
-		fmt.Printf("Error opening video capture device: %v\n", deviceID)
+		log.WithFields(logrus.Fields{
+			"error":    err,
+			"deviceId": deviceID,
+		}).Error("cannot create webcam from camera device.")
 		return
 	}
 	defer webcam.Close()
@@ -73,7 +85,10 @@ func main() {
 	// open DNN classifier
 	net := gocv.ReadNet(model, "")
 	if net.Empty() {
-		fmt.Printf("Error reading network model : %v\n", model)
+		log.WithFields(logrus.Fields{
+			"error": err,
+			"model": model,
+		}).Error("cannot read network model.")
 		return
 	}
 	defer net.Close()
@@ -82,24 +97,28 @@ func main() {
 
 	// initialize image and prediciton
 	if ok := webcam.Read(&img); !ok {
-		fmt.Printf("Cannot read dev %v\n", deviceID)
+		log.WithFields(logrus.Fields{
+			"error":    err,
+			"deviceId": deviceID,
+		}).Error("cannot capture video from device.")
 		return
 	}
-	fmt.Println("initializing to camera")
+	log.Info("initalizing camera")
 	wg.Add(1)
 	go predict(net, img, pc, wg)
 
 	/* do main loop */
 
-	fmt.Println("recording...")
+	log.Info("recording...")
 	run := true
 	ct := 0
 	for run {
 		if ok := webcam.Read(&img); !ok {
-			fmt.Printf("Device closed: %v\n", deviceID)
+			log.Warn("device closed, unable to read image")
 			return
 		}
 		if img.Empty() {
+			log.Warn("empty image. check the camera is working")
 			continue
 		}
 
@@ -112,8 +131,12 @@ func main() {
 		// communicates back over a channel when complete
 		select {
 		case pred := <-pc:
-			// desc := descriptions[pred]
-			// fmt.Println("loop", ct, ": found ", desc, " at idx ", pred)
+			desc := descriptions[pred]
+			log.WithFields(logrus.Fields{
+				"loop":            ct,
+				"prediction":      desc,
+				"predicitonIndex": pred,
+			}).Debug("received prediction")
 			if pred == PRED_TO_MATCH {
 				// 1- write video only when we found what we wanted
 				// 2- make sure we're not in the middle of a previous write
@@ -135,11 +158,10 @@ func main() {
 			wg.Add(1)
 			go predict(net, img, pc, wg)
 		case <-done:
-			fmt.Println("received interrupt. shutting down gracefully.")
+			log.Info("received interrupt. shutting down gracefully.")
 			run = false
 		default:
 			// no prediction result back yet
-			continue
 		}
 		ct++
 	}
@@ -198,9 +220,9 @@ func writeVideo(bq *bufferqueue.BufferQueue, wg *sync.WaitGroup) {
 	bq.Unlock()
 
 	// sleep in the background until we're ready to capture video
-	fmt.Println("triggered save. sleeping... ")
+	log.Info("save triggered. sleeping...")
 	time.Sleep(time.Second * time.Duration(RECORD_TIME_AFTER_TRIGGER))
-	fmt.Println("done sleeping. doing save")
+	log.Info("done sleeping. doing save")
 
 	// lock buffer queue and get dim of first image
 	bq.Lock()
@@ -209,12 +231,14 @@ func writeVideo(bq *bufferqueue.BufferQueue, wg *sync.WaitGroup) {
 
 	// create filename
 	saveFname := genSaveFname()
-	fmt.Println("saving to: ", saveFname)
+	log.Debug("saving to: ", saveFname)
 
 	// create writer
 	writer, err := gocv.VideoWriterFile(saveFname, "MJPG", FPS, img.Cols(), img.Rows(), true)
 	if err != nil {
-		fmt.Printf("error opening video writer device: %v\n", saveFname)
+		log.WithFields(logrus.Fields{
+			"saveFname": saveFname,
+		}).Error("unable to open video writer.")
 		return
 	}
 	defer writer.Close()
@@ -227,7 +251,7 @@ func doWrite(bq *bufferqueue.BufferQueue, writer *gocv.VideoWriter) {
 	for n := bq.First(); n != nil; n = n.Next() {
 		writer.Write(n.GetData())
 	}
-	fmt.Println("saved.")
+	log.Info("saved new video file.")
 }
 
 func genSaveFname() string {
