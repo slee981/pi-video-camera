@@ -13,6 +13,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/slee981/pi-video-camera/utils/bufferqueue"
+	"github.com/slee981/pi-video-camera/utils/uploader"
 	"gocv.io/x/gocv"
 )
 
@@ -55,6 +56,15 @@ func main() {
 
 	// buffer queue for handling video stream
 	bq := bufferqueue.NewBufferQueue(FRAMES_PER_VIDEO)
+
+	// get uploader to run cloud sync
+	uploader := uploader.NewUploader(
+		"",
+		"pi-videos",
+		"recordings",
+		"/home/stephen/Documents/CodeWorkspace/Go/pi-video-recorder",
+		"avi",
+	)
 
 	// read model description
 	descriptions, err := readDescriptions(descr)
@@ -148,7 +158,7 @@ func main() {
 				case bq.IsWritable():
 					// last write already succeeded
 					wg.Add(1)
-					go writeVideo(bq, wg)
+					go writeVideo(bq, uploader, wg)
 				default:
 					// we matched again before the last write is complete
 				}
@@ -210,14 +220,12 @@ func predict(net gocv.Net, img gocv.Mat, c chan int, wg *sync.WaitGroup) {
 	c <- maxLoc.X
 }
 
-func writeVideo(bq *bufferqueue.BufferQueue, wg *sync.WaitGroup) {
+func writeVideo(bq *bufferqueue.BufferQueue, u *uploader.AzureUploader, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	// block other write calls
-	bq.Lock()
 	bq.LockWrite()
 	defer bq.UnlockWrite()
-	bq.Unlock()
 
 	// sleep in the background until we're ready to capture video
 	log.Info("save triggered. sleeping...")
@@ -225,7 +233,7 @@ func writeVideo(bq *bufferqueue.BufferQueue, wg *sync.WaitGroup) {
 	log.Info("done sleeping. doing save")
 
 	// lock buffer queue and get dim of first image
-	// NOTE do not close image as it will remove you first image from queue
+	// NOTE do not close image as it will remove the first image from queue
 	bq.Lock()
 	defer bq.Unlock()
 	img := bq.First().GetData()
@@ -246,6 +254,7 @@ func writeVideo(bq *bufferqueue.BufferQueue, wg *sync.WaitGroup) {
 
 	// write each image in the list and communicate back
 	doWrite(bq, writer)
+	go u.Upload(saveFname)
 }
 
 func doWrite(bq *bufferqueue.BufferQueue, writer *gocv.VideoWriter) {
