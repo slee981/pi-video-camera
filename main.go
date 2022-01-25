@@ -30,12 +30,22 @@ var (
 	SAVE_FILE_TEMPLATE string = "imgs/recording_{VIDEO_NUMBER}.avi"
 )
 
+// local directory info
 var (
 	deviceID    int    = 0
 	model       string = "/home/stephen/Downloads/tf/tensorflow_inception_graph.pb"
 	descr       string = "/home/stephen/Downloads/tf/imagenet_comp_graph_label_strings.txt"
 	backendPref string = "opencv"
 	targetPref  string = "cpu"
+)
+
+// azure info
+var (
+	key       string = "ws0tcluXpxnWAlkbTSpCnmSY6aXX+iogSd+dHaL7mpBqdLz5Xu2Z6FIHc8Phjvs5S7BlihVGmShe0vs8epGOkw=="
+	acct      string = "pivideos"
+	container string = "recordings"
+	localDir  string = "/home/stephen/Documents/CodeWorkspace/Go/pi-video-recorder"
+	fileType  string = "avi"
 )
 
 var log = logrus.New()
@@ -58,13 +68,7 @@ func main() {
 	bq := bufferqueue.NewBufferQueue(FRAMES_PER_VIDEO)
 
 	// get uploader to run cloud sync
-	uploader := uploader.NewUploader(
-		"ws0tcluXpxnWAlkbTSpCnmSY6aXX+iogSd+dHaL7mpBqdLz5Xu2Z6FIHc8Phjvs5S7BlihVGmShe0vs8epGOkw==",
-		"pivideos",
-		"recordings",
-		"/home/stephen/Documents/CodeWorkspace/Go/pi-video-recorder",
-		"avi",
-	)
+	uploader := uploader.NewUploader(key, acct, container, localDir, fileType)
 
 	// read model description
 	descriptions, err := readDescriptions(descr)
