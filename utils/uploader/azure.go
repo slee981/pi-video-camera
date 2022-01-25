@@ -129,7 +129,7 @@ func (u *AzureUploader) uploadFile(f string) (bool, error) {
 	for !ok && tries < maxTries {
 		// try to upload 3 times before stopping
 		// assume no internet and will try later
-		fmt.Println("trying upload ", tries)
+		fmt.Println("upload attempt", tries)
 		ok, err = u.uploadBytesToBlob(d)
 		tries++
 	}
@@ -158,7 +158,11 @@ func (u *AzureUploader) uploadBytesToBlob(b []byte) (bool, error) {
 		return false, err
 	}
 
-	blockBlobUrl := azblob.NewBlockBlobURL(*uploadFile, azblob.NewPipeline(cred, azblob.PipelineOptions{}))
+	blockBlobUrl := azblob.NewBlockBlobURL(*uploadFile, azblob.NewPipeline(cred, azblob.PipelineOptions{
+		Retry: azblob.RetryOptions{
+			TryTimeout: 5 * time.Minute,
+		},
+	}))
 	fmt.Println("trying to upload ", blockBlobUrl.String())
 
 	ctx := context.Background()

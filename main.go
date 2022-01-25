@@ -59,8 +59,8 @@ func main() {
 
 	// get uploader to run cloud sync
 	uploader := uploader.NewUploader(
-		"",
-		"pi-videos",
+		"ws0tcluXpxnWAlkbTSpCnmSY6aXX+iogSd+dHaL7mpBqdLz5Xu2Z6FIHc8Phjvs5S7BlihVGmShe0vs8epGOkw==",
+		"pivideos",
 		"recordings",
 		"/home/stephen/Documents/CodeWorkspace/Go/pi-video-recorder",
 		"avi",
