@@ -42,7 +42,7 @@ var (
 
 // azure info
 var (
-	key       string = "ws0tcluXpxnWAlkbTSpCnmSY6aXX+iogSd+dHaL7mpBqdLz5Xu2Z6FIHc8Phjvs5S7BlihVGmShe0vs8epGOkw=="
+	key       string = "AZURE_KEY"
 	acct      string = "pivideos"
 	container string = "recordings"
 	fileType  string = "avi"
